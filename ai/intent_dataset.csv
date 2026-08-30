@@ -1,0 +1,66 @@
+text,intent
+Can I eat rice during weight loss?,nutrition_question
+How much protein should I eat?,nutrition_question
+Can I drink milk after workout?,nutrition_question
+Is banana good before gym?,nutrition_question
+Should I avoid sugar?,nutrition_question
+How many calories are in oats?,nutrition_question
+Can I eat eggs every day?,nutrition_question
+What foods are high in protein?,nutrition_question
+Suggest healthy breakfast,nutrition_question
+Is peanut butter healthy?,nutrition_question
+
+Generate workout for me,workout_request
+Create today's workout,workout_request
+Give me a chest workout,workout_request
+I need leg exercises,workout_request
+Make a workout plan,workout_request
+Suggest home workout,workout_request
+Workout without equipment,workout_request
+Need beginner workout,workout_request
+Show shoulder workout,workout_request
+Best exercises for abs,workout_request
+
+My shoulder hurts after workout,injury_question
+Pain in my knees,injury_question
+My back is hurting,injury_question
+Elbow pain while lifting,injury_question
+Wrist pain during push ups,injury_question
+Why are my muscles sore?,injury_question
+My ankle hurts while running,injury_question
+Neck pain after exercise,injury_question
+Pain after squats,injury_question
+I pulled my hamstring,injury_question
+
+My hair is falling,hair_question
+Hair fall after gym,hair_question
+How can I stop hair loss?,hair_question
+Best food for hair growth,hair_question
+Hair becoming thin,hair_question
+My scalp is dry,hair_question
+How to improve hair health?,hair_question
+Hair care tips,hair_question
+Can protein help hair?,hair_question
+Hair is breaking,hair_question
+
+I have pimples,skin_question
+How to remove acne?,skin_question
+Skin is becoming dark,skin_question
+Food for glowing skin,skin_question
+Dry skin problem,skin_question
+How to reduce tanning?,skin_question
+Skin care tips,skin_question
+Best fruits for skin,skin_question
+Oily skin treatment,skin_question
+How to improve skin naturally?,skin_question
+
+I am not motivated,motivation
+I feel lazy,motivation
+I want to quit gym,motivation
+Motivate me,motivation
+I am losing confidence,motivation
+I don't feel like exercising,motivation
+Help me stay consistent,motivation
+I missed my workout,motivation
+Feeling low today,motivation
+How do I stay disciplined?,motivation
