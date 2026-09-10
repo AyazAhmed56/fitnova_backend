@@ -1,8 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic
 joblib
 pandas
 scikit-learn
 nltk
 python-dotenv
+google-generativeai
