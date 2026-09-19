@@ -1,0 +1,14 @@
+### Health
+GET http://127.0.0.1:8000/
+
+### Nutrition suggestions
+GET http://127.0.0.1:8000/nutrition/suggestions
+
+### Calcium
+GET http://127.0.0.1:8000/nutrition/search?query=calcium&limit=20
+
+### Protein
+GET http://127.0.0.1:8000/nutrition/search?query=protein&limit=20
+
+### Iron
+GET http://127.0.0.1:8000/nutrition/search?query=iron&limit=20

@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-
+from nutrition.router import router as nutrition_router
 from ai_pipeline import AIPipeline
 
 
 app = FastAPI(title="FitNova AI Coach API")
-
+app.include_router(nutrition_router)
 
 # Allow Flutter/frontend to connect
 app.add_middleware(
