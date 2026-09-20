@@ -7,3 +7,4 @@ scikit-learn
 nltk
 python-dotenv
 google-genai
+requests
