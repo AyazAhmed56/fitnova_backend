@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Query
 
 from .models import (
     NutritionFoodDetailsResponse,
-    NutritionRecipe,
     NutritionSearchResponse,
 )
 from .service import NutritionService
@@ -81,21 +80,3 @@ async def nutrition_food(food_id: str):
         ) from exc
 
 
-@router.get(
-    "/recipe/{recipe_id}",
-    response_model=NutritionRecipe,
-)
-async def nutrition_recipe(recipe_id: str):
-    try:
-        service = NutritionService()
-        return await service.get_recipe(recipe_id)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unable to load recipe: {exc}",
-        ) from exc

@@ -48,41 +48,10 @@ class NutritionFood(BaseModel):
     nutrient_unit: Optional[str] = None
 
 
-class RecipeIngredient(BaseModel):
-    id: str
-    ingredient_name: str
-    quantity: Optional[float] = None
-    unit: Optional[str] = None
-    sort_order: int = 0
-
-
-class NutritionRecipe(BaseModel):
-    id: str
-    name: str
-    normalized_name: str
-    description: Optional[str] = None
-    image_url: Optional[str] = None
-
-    calories: Optional[float] = None
-    protein_g: Optional[float] = None
-    carbohydrates_g: Optional[float] = None
-    fat_g: Optional[float] = None
-    fiber_g: Optional[float] = None
-    calcium_mg: Optional[float] = None
-    iron_mg: Optional[float] = None
-
-    instructions: Optional[str] = None
-    ingredients: list[RecipeIngredient] = Field(default_factory=list)
-
-    nutrient_value: Optional[float] = None
-    nutrient_unit: Optional[str] = None
-
-
 class NutritionSearchResponse(BaseModel):
     query: str
     nutrient: NutrientInfo
     foods: list[NutritionFood]
-    recipes: list[NutritionRecipe]
     total: int
 
 
@@ -94,4 +63,3 @@ class NutritionSearchSuggestion(BaseModel):
 
 class NutritionFoodDetailsResponse(BaseModel):
     food: NutritionFood
-    recipe: Optional[NutritionRecipe] = None

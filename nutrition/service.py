@@ -8,9 +8,7 @@ from .models import (
     NutrientInfo,
     NutritionFood,
     NutritionFoodDetailsResponse,
-    NutritionRecipe,
     NutritionSearchResponse,
-    RecipeIngredient,
 )
 from .nutrient_map import (
     NUTRIENTS,
@@ -324,7 +322,6 @@ class NutritionService:
             await self._cache_foods(converted)
 
         # Recipes are FitNova-managed and searched separately.
-        recipes = await self._search_recipes(nutrient, limit)
 
         return NutritionSearchResponse(
             query=query,
@@ -334,8 +331,7 @@ class NutritionService:
                 unit=nutrient.unit,
             ),
             foods=foods,
-            recipes=recipes,
-            total=len(foods) + len(recipes),
+            total=len(foods),
         )
 
     async def get_food(
@@ -358,36 +354,7 @@ class NutritionService:
 
         return NutritionFoodDetailsResponse(food=food)
 
-    async def get_recipe(
-        self,
-        recipe_id: str,
-    ) -> NutritionRecipe:
-        rows = await self.db.select(
-            "nutrition_recipes",
-            [
-                ("select", "*"),
-                ("id", f"eq.{recipe_id}"),
-                ("is_active", "eq.true"),
-                ("limit", "1"),
-            ],
-        )
-
-        if not rows:
-            raise ValueError("Recipe was not found.")
-
-        row = rows[0]
-
-        ingredient_rows = await self.db.select(
-            "nutrition_recipe_ingredients",
-            [
-                ("select", "id,ingredient_name,quantity,unit,sort_order"),
-                ("recipe_id", f"eq.{recipe_id}"),
-                ("order", "sort_order.asc"),
-            ],
-        )
-
-        return self._recipe_from_row(row, ingredient_rows)
-
+    
     async def _search_cached_foods(
         self,
         nutrient: NutrientDefinition,
@@ -419,72 +386,7 @@ class NutritionService:
             for row in rows
         ]
 
-    async def _search_recipes(
-        self,
-        nutrient: NutrientDefinition,
-        limit: int,
-    ) -> list[NutritionRecipe]:
-        # For recipes we use the nutrition columns available in the
-        # recipe table. Nutrients not represented there simply return
-        # no recipe rows.
-        column_map = {
-            "protein": "protein_g",
-            "calcium": "calcium_mg",
-            "iron": "iron_mg",
-            "fiber": "fiber_g",
-            "carbohydrates": "carbohydrates_g",
-        }
-
-        column = column_map.get(nutrient.key)
-        if not column:
-            return []
-
-        rows = await self.db.select(
-            "nutrition_recipes",
-            [
-                (
-                    "select",
-                    "id,name,normalized_name,description,image_url,"
-                    "calories,protein_g,carbohydrates_g,fat_g,fiber_g,"
-                    "calcium_mg,iron_mg,instructions,source,source_url"
-                ),
-                ("is_active", "eq.true"),
-                (column, "not.is.null"),
-                ("order", f"{column}.desc"),
-                ("limit", str(min(limit, 20))),
-            ],
-        )
-
-        recipes: list[NutritionRecipe] = []
-
-        for row in rows:
-            value = _safe_float(row.get(column))
-            if value is None or value < nutrient.min_value:
-                continue
-
-            ingredient_rows = await self.db.select(
-                "nutrition_recipe_ingredients",
-                [
-                    (
-                        "select",
-                        "id,ingredient_name,quantity,unit,sort_order",
-                    ),
-                    ("recipe_id", f"eq.{row['id']}"),
-                    ("order", "sort_order.asc"),
-                ],
-            )
-
-            recipes.append(
-                self._recipe_from_row(
-                    row,
-                    ingredient_rows,
-                    nutrient_value=value,
-                    nutrient_unit=nutrient.unit,
-                )
-            )
-
-        return recipes
-
+    
     def _convert_usda_foods(
         self,
         foods: list[dict[str, Any]],
@@ -649,39 +551,4 @@ class NutritionService:
             nutrient_unit=nutrient.unit if nutrient else None,
         )
 
-    def _recipe_from_row(
-        self,
-        row: dict[str, Any],
-        ingredient_rows: list[dict[str, Any]],
-        nutrient_value: float | None = None,
-        nutrient_unit: str | None = None,
-    ) -> NutritionRecipe:
-        ingredients = [
-            RecipeIngredient(
-                id=str(item["id"]),
-                ingredient_name=str(item["ingredient_name"]),
-                quantity=_safe_float(item.get("quantity")),
-                unit=item.get("unit"),
-                sort_order=int(item.get("sort_order") or 0),
-            )
-            for item in ingredient_rows
-        ]
-
-        return NutritionRecipe(
-            id=str(row["id"]),
-            name=str(row["name"]),
-            normalized_name=str(row["normalized_name"]),
-            description=row.get("description"),
-            image_url=row.get("image_url"),
-            calories=_safe_float(row.get("calories")),
-            protein_g=_safe_float(row.get("protein_g")),
-            carbohydrates_g=_safe_float(row.get("carbohydrates_g")),
-            fat_g=_safe_float(row.get("fat_g")),
-            fiber_g=_safe_float(row.get("fiber_g")),
-            calcium_mg=_safe_float(row.get("calcium_mg")),
-            iron_mg=_safe_float(row.get("iron_mg")),
-            instructions=row.get("instructions"),
-            ingredients=ingredients,
-            nutrient_value=nutrient_value,
-            nutrient_unit=nutrient_unit,
-        )
+    
