@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from nutrition.router import router as nutrition_router
 from ai_pipeline import AIPipeline
 
-
 app = FastAPI(title="FitNova AI Coach API")
 app.include_router(nutrition_router)
 
@@ -17,22 +16,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # Create pipeline once
 pipeline = AIPipeline()
-
 
 class ChatRequest(BaseModel):
     user_id: str
     message: str
-
 
 @app.get("/")
 def home():
     return {
         "message": "FitNova AI Coach API is running"
     }
-
 
 @app.post("/api/ai-coach/chat")
 def chat(request: ChatRequest):
