@@ -1,106 +1,95 @@
+import json
+from typing import Any
+
+
 class PromptBuilder:
+    """Creates personalized, safety-aware prompts for the FitNova AI Coach."""
 
-    def build(self, context: dict):
+    PROFILE_FIELDS = [
+        # Personal and physical profile
+        "fullName", "age", "gender", "height", "weight", "medical",
+        "state", "nativeState",
 
-        prompt = f"""
-You are FitNova AI.
+        # Fitness goals
+        "goal", "targetWeight", "muscleGainTarget", "strengthGoal",
+        "primaryLift", "repRange", "enduranceGoal", "cardioPreference",
+        "fitnessGoals", "workoutPlace", "sportName", "performanceGoals",
+        "competitionLevel", "workoutDays", "durationMonths", "activityLevel",
+        "fitnessLevel",
 
-You are an expert Fitness Coach, Sports Nutritionist,
-Physiotherapist and Health Coach.
+        # Diet
+        "dietaryPreferences", "allergies", "comments", "mealsPerDay",
+        "budget",
 
-Analyze the following user information carefully.
+        # Schedule, activity and recovery
+        "sleepHours", "waterIntake", "job", "workoutTime", "breakTime",
+        "officeTime", "exercise", "wakeUp", "workoutPrefer",
+        "equipmentPrefer", "split", "customSplit",
 
-=========================
-CURRENT USER MESSAGE
-=========================
-{context["user_message"]}
+        # Skin, hair and body
+        "skinTone", "skinConcerns", "hairType", "hairConcerns",
+        "bodyType", "bodyGoal", "scalpType",
+    ]
 
-=========================
-INTENT
-=========================
-{context["intent"]}
-
-=========================
-CURRENT ENTITIES
-=========================
-{context["current_entities"]}
-
-=========================
-CONVERSATION MEMORY
-=========================
-{context["memory"]}
-
-=========================
-INSTRUCTIONS
-=========================
-
-1. Answer according to the detected intent.
-
-2. Use conversation memory whenever required.
-
-3. If the question is injury related,
-   prioritize user safety.
-
-4. Keep the answer personalized.
-
-5. Keep the answer concise.
-
-6. Never recommend steroids,
-   unsafe medicines,
-   dangerous exercises
-   or illegal substances.
-
-7. If you are unsure,
-   recommend consulting a healthcare professional.
-
-Return only the answer.
-"""
-
-        return prompt.strip()
-
-
-if __name__ == "__main__":
-
-    sample_context = {
-
-        "user_message": "My shoulder hurts while doing bench press",
-
-        "intent": "injury_question",
-
-        "current_entities": {
-            "body_parts": ["shoulder"],
-            "symptoms": ["hurt"],
-            "foods": [],
-            "nutrients": [],
-            "exercises": ["bench_press"],
-            "equipment": [],
-            "goals": [],
-            "skin": [],
-            "hair": [],
-            "time": []
-        },
-
-        "memory": {
-
-            "intent": "injury_question",
-
-            "entities": {
-
-                "body_parts": ["shoulder"],
-                "symptoms": ["hurt"],
-                "foods": [],
-                "nutrients": [],
-                "exercises": ["bench_press"],
-                "equipment": [],
-                "goals": [],
-                "skin": [],
-                "hair": [],
-                "time": []
-            }
-        }
-
+    # Common database snake_case aliases are normalized to the onboarding
+    # names used by the Flutter app.
+    FIELD_ALIASES = {
+        "full_name": "fullName",
+        "target_weight": "targetWeight",
+        "muscle_gain_target": "muscleGainTarget",
+        "strength_goal": "strengthGoal",
+        "primary_lift": "primaryLift",
+        "rep_range": "repRange",
+        "endurance_goal": "enduranceGoal",
+        "cardio_preference": "cardioPreference",
+        "fitness_goals": "fitnessGoals",
+        "workout_place": "workoutPlace",
+        "sport_name": "sportName",
+        "performance_goals": "performanceGoals",
+        "competition_level": "competitionLevel",
+        "workout_days": "workoutDays",
+        "duration_months": "durationMonths",
+        "activity_level": "activityLevel",
+        "fitness_level": "fitnessLevel",
+        "dietary_preferences": "dietaryPreferences",
+        "meals_per_day": "mealsPerDay",
+        "sleep_hours": "sleepHours",
+        "water_intake": "waterIntake",
+        "workout_time": "workoutTime",
+        "break_time": "breakTime",
+        "office_time": "officeTime",
+        "workout_prefer": "workoutPrefer",
+        "equipment_prefer": "equipmentPrefer",
+        "custom_split": "customSplit",
+        "skin_tone": "skinTone",
+        "skin_concerns": "skinConcerns",
+        "hair_type": "hairType",
+        "hair_concerns": "hairConcerns",
+        "body_type": "bodyType",
+        "body_goal": "bodyGoal",
+        "scalp_type": "scalpType",
+        "native_state": "nativeState",
     }
 
-    builder = PromptBuilder()
+    @staticmethod
+    def _json(value: Any) -> str:
+        try:
+            return json.dumps(
+                value, ensure_ascii=False, indent=2, default=str
+            )
+        except (TypeError, ValueError):
+            return str(value)
 
-    print(builder.build(sample_context))
+    def _prepare_profile(self, profile: Any) -> dict:
+        if not isinstance(profile, dict):
+            if hasattr(profile, "model_dump"):
+                profile = profile.model_dump()
+            elif hasattr(profile, "__dict__"):
+                profile = vars(profile)
+            else:
+                return {}
+
+        normalized = dict(profile)
+        for source, target in self.FIELD_ALIASES.items():
+            if source in profile and target not in normalized:
+                normalized[target] = profile[source]

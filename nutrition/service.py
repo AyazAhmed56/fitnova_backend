@@ -81,6 +81,145 @@ def _normalize_name(value: str) -> str:
     return value
 
 
+# USDA contains many technically valid records that are not useful
+# as everyday food recommendations (for example baking powder,
+# additives, salts, and supplements). These should not appear in
+# FitNova's nutrient-rich food list.
+GENERIC_EXCLUDED_TERMS = (
+    "baking powder",
+    "baking soda",
+    "leavening agent",
+    "food additive",
+    "food coloring",
+    "food colour",
+    "flavoring",
+    "flavor enhancer",
+    "flavouring",
+    "thickener",
+    "preservative",
+    "stabilizer",
+    "emulsifier",
+    "sweetener",
+    "salt substitute",
+    "calcium carbonate",
+    "calcium citrate",
+    "calcium phosphate",
+    "calcium sulfate",
+    "calcium lactate",
+    "calcium gluconate",
+    "supplement",
+    "protein powder",
+    "vitamin supplement",
+    "mineral supplement",
+)
+
+
+PREFERRED_FOOD_TERMS: dict[str, tuple[str, ...]] = {
+    "calcium": (
+        "milk", "yogurt", "cheese", "paneer", "ragi",
+        "sesame", "tofu", "soy", "spinach", "sardine",
+    ),
+    "protein": (
+        "chicken", "egg", "fish", "paneer", "milk",
+        "lentil", "chickpea", "soy", "tofu", "yogurt",
+    ),
+    "iron": (
+        "spinach", "lentil", "chickpea", "bean",
+        "sesame", "pumpkin seed", "tofu", "beef",
+    ),
+    "fiber": (
+        "oat", "lentil", "bean", "chickpea",
+        "apple", "pear", "guava", "chia", "flax",
+    ),
+    "potassium": (
+        "banana", "potato", "spinach", "avocado",
+        "tomato", "bean", "yogurt", "coconut",
+    ),
+    "magnesium": (
+        "almond", "cashew", "pumpkin seed",
+        "spinach", "bean", "oat",
+    ),
+    "zinc": (
+        "pumpkin seed", "sesame", "chickpea",
+        "lentil", "egg", "milk", "cashew",
+    ),
+    "vitamin_a": (
+        "carrot", "spinach", "sweet potato",
+        "pumpkin", "mango", "egg", "milk",
+    ),
+    "vitamin_c": (
+        "guava", "amla", "orange", "lemon",
+        "kiwi", "bell pepper", "tomato", "broccoli",
+    ),
+    "vitamin_d": (
+        "milk", "egg", "salmon", "sardine",
+        "mushroom", "yogurt",
+    ),
+    "vitamin_b12": (
+        "milk", "egg", "yogurt", "cheese",
+        "chicken", "fish", "salmon",
+    ),
+    "folate": (
+        "spinach", "lentil", "chickpea",
+        "bean", "avocado", "asparagus", "broccoli",
+    ),
+    "omega_3": (
+        "salmon", "sardine", "mackerel", "flax",
+        "chia", "walnut",
+    ),
+    "healthy_fats": (
+        "avocado", "almond", "walnut", "peanut",
+        "olive", "chia", "flax",
+    ),
+    "carbohydrates": (
+        "rice", "oat", "potato", "sweet potato",
+        "banana", "bread", "whole wheat", "quinoa",
+    ),
+}
+
+
+def _is_useful_food(name: str) -> bool:
+    normalized = _normalize_name(name)
+
+    if not normalized:
+        return False
+
+    return not any(
+        term in normalized
+        for term in GENERIC_EXCLUDED_TERMS
+    )
+
+
+def _food_relevance_score(
+    name: str,
+    nutrient: NutrientDefinition,
+) -> float:
+    normalized = _normalize_name(name)
+
+    if not _is_useful_food(normalized):
+        return -100000.0
+
+    terms = PREFERRED_FOOD_TERMS.get(nutrient.key, ())
+
+    # A positive relevance score is used only to prefer recognizable
+    # food sources. The nutrient amount remains part of the final score.
+    score = 0.0
+
+    for index, term in enumerate(terms):
+        if term in normalized:
+            score += 1000.0 - (index * 25.0)
+
+    # Prefer simple food names over highly processed/compound records.
+    word_count = len(normalized.split())
+
+    if word_count <= 6:
+        score += 50.0
+    elif word_count > 15:
+        score -= 100.0
+
+    return score
+
+
 def _nutrient_value_from_search_food(
     food: dict[str, Any],
     nutrient: NutrientDefinition,
@@ -249,26 +388,45 @@ class NutritionService:
 
         limit = min(max(limit, 1), 50)
 
-        # 1. First search FitNova's cached food records.
-        cached = await self._search_cached_foods(nutrient, limit)
+        # IMPORTANT: do not rank the entire 13k+ food table by nutrient
+        # amount. That makes ingredients/additives such as baking powder
+        # outrank normal foods. Search the nutrient's preferred food terms
+        # directly first.
+        cached = await self._search_preferred_cached_foods(
+            nutrient,
+            candidate_limit=max(limit * 5, 100),
+        )
 
-        # 2. If cache is insufficient, ask USDA.
-        #    We first use the nutrient term, then fallback food terms.
+        # Use the broad nutrient cache only as a fallback.
+        if len(cached) < limit:
+            fallback = await self._search_cached_foods(
+                nutrient,
+                candidate_limit=500,
+            )
+
+            existing_names = {item.normalized_name for item in cached}
+            for item in fallback:
+                if item.normalized_name not in existing_names:
+                    cached.append(item)
+                    existing_names.add(item.normalized_name)
+
+        # USDA is searched using actual food names, never just
+        # "calcium", "iron", etc. This avoids generic ingredient results.
         usda_foods: list[dict[str, Any]] = []
 
-        search_queries = [nutrient.display_name]
-        search_queries.extend(SEARCH_TERMS.get(nutrient.key, ())[:6])
-
-        # Avoid unnecessary calls when cache already has enough data.
         if len(cached) < limit:
+            search_queries = list(
+                SEARCH_TERMS.get(nutrient.key, ())
+            )
+
             seen_queries: set[str] = set()
 
             for search_query in search_queries:
-                normalized = normalize_query(search_query)
-                if normalized in seen_queries:
+                normalized_query = normalize_query(search_query)
+                if normalized_query in seen_queries:
                     continue
 
-                seen_queries.add(normalized)
+                seen_queries.add(normalized_query)
 
                 try:
                     results = await self.usda.search(
@@ -277,11 +435,10 @@ class NutritionService:
                     )
                     usda_foods.extend(results)
                 except RuntimeError:
-                    # Keep cached results available if USDA is temporarily
-                    # unavailable or rate limited.
+                    # Cached results remain usable if USDA is unavailable.
                     break
 
-                if len(usda_foods) >= 150:
+                if len(usda_foods) >= 300:
                     break
 
         converted = self._convert_usda_foods(
@@ -289,39 +446,46 @@ class NutritionService:
             nutrient,
         )
 
-        # Merge cache + USDA results, keeping the best nutrient value
-        # for duplicate names.
         merged: dict[str, NutritionFood] = {}
 
         for item in cached:
-            merged[item.normalized_name] = item
+            if _is_useful_food(item.name):
+                merged[item.normalized_name] = item
 
         for item in converted:
+            if not _is_useful_food(item.name):
+                continue
+
             existing = merged.get(item.normalized_name)
             if existing is None:
                 merged[item.normalized_name] = item
             else:
-                old_value = existing.nutrient_value or 0
-                new_value = item.nutrient_value or 0
+                old_value = existing.nutrient_value or 0.0
+                new_value = item.nutrient_value or 0.0
                 if new_value > old_value:
                     merged[item.normalized_name] = item
 
         foods = [
-            item for item in merged.values()
-            if (item.nutrient_value or 0) >= nutrient.min_value
+            item
+            for item in merged.values()
+            if _is_useful_food(item.name)
+            and (item.nutrient_value or 0.0) >= nutrient.min_value
         ]
 
+        # Preferred recognizable foods come first. Nutrient amount is the
+        # secondary ranking factor, so additives cannot dominate the list.
         foods.sort(
-            key=lambda item: item.nutrient_value or 0,
+            key=lambda item: (
+                _food_relevance_score(item.name, nutrient),
+                item.nutrient_value or 0.0,
+            ),
             reverse=True,
         )
+
         foods = foods[:limit]
 
-        # Save newly obtained USDA foods.
         if converted:
             await self._cache_foods(converted)
-
-        # Recipes are FitNova-managed and searched separately.
 
         return NutritionSearchResponse(
             query=query,
@@ -355,18 +519,78 @@ class NutritionService:
         return NutritionFoodDetailsResponse(food=food)
 
     
-    async def _search_cached_foods(
+    async def _search_preferred_cached_foods(
         self,
         nutrient: NutrientDefinition,
-        limit: int,
+        candidate_limit: int = 100,
     ) -> list[NutritionFood]:
         column = NUTRIENT_TO_COLUMN.get(nutrient.key)
-
         if not column:
             return []
 
-        # We intentionally use a broad read here because the table is
-        # cached and limited by the backend. PostgREST supports ordering.
+        terms = SEARCH_TERMS.get(nutrient.key, ())
+        results: dict[str, NutritionFood] = {}
+
+        # Search Supabase by actual food terms. This is the key fix:
+        # we no longer ask Supabase for the globally highest calcium rows.
+        for term in terms:
+            try:
+                rows = await self.db.select(
+                    "nutrition_foods",
+                    [
+                        ("select", "*"),
+                        ("food_type", "eq.raw"),
+                        (column, "not.is.null"),
+                        ("normalized_name", f"ilike.*{term}*"),
+                        ("order", f"{column}.desc"),
+                        ("limit", "50"),
+                    ],
+                )
+            except RuntimeError:
+                continue
+
+            for row in rows:
+                name = str(row.get("name") or "").strip()
+                if not name or not _is_useful_food(name):
+                    continue
+
+                food = self._food_from_row(
+                    row,
+                    nutrient=nutrient,
+                )
+
+                if food.nutrient_value is None:
+                    continue
+                if food.nutrient_value < nutrient.min_value:
+                    continue
+
+                key = food.normalized_name
+                existing = results.get(key)
+                if existing is None or (
+                    food.nutrient_value > (existing.nutrient_value or 0.0)
+                ):
+                    results[key] = food
+
+        foods = list(results.values())
+        foods.sort(
+            key=lambda item: (
+                _food_relevance_score(item.name, nutrient),
+                item.nutrient_value or 0.0,
+            ),
+            reverse=True,
+        )
+
+        return foods[:candidate_limit]
+
+    async def _search_cached_foods(
+        self,
+        nutrient: NutrientDefinition,
+        candidate_limit: int = 100,
+    ) -> list[NutritionFood]:
+        column = NUTRIENT_TO_COLUMN.get(nutrient.key)
+        if not column:
+            return []
+
         rows = await self.db.select(
             "nutrition_foods",
             [
@@ -374,19 +598,39 @@ class NutritionService:
                 ("food_type", "eq.raw"),
                 (column, "not.is.null"),
                 ("order", f"{column}.desc"),
-                ("limit", str(min(limit, 50))),
+                ("limit", str(min(max(candidate_limit, 100), 1000))),
             ],
         )
 
-        return [
-            self._food_from_row(
+        candidates: list[NutritionFood] = []
+
+        for row in rows:
+            name = str(row.get("name") or "").strip()
+            if not name or not _is_useful_food(name):
+                continue
+
+            food = self._food_from_row(
                 row,
                 nutrient=nutrient,
             )
-            for row in rows
-        ]
 
-    
+            if food.nutrient_value is None:
+                continue
+            if food.nutrient_value < nutrient.min_value:
+                continue
+
+            candidates.append(food)
+
+        candidates.sort(
+            key=lambda item: (
+                _food_relevance_score(item.name, nutrient),
+                item.nutrient_value or 0.0,
+            ),
+            reverse=True,
+        )
+
+        return candidates[:candidate_limit]
+
     def _convert_usda_foods(
         self,
         foods: list[dict[str, Any]],
@@ -412,6 +656,9 @@ class NutritionService:
             )
 
             if value is None or value < nutrient.min_value:
+                continue
+
+            if not _is_useful_food(name):
                 continue
 
             seen.add(normalized)
