@@ -8,3 +8,5 @@ nltk
 python-dotenv
 google-genai
 requests
+asyncio
+logging
